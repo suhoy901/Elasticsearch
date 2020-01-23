@@ -1,0 +1,146 @@
+PUT twitter
+{
+	"settings" : {
+		"index" : {
+			"number_of_shards" : 3,
+			"number_of_replicas" : 1
+		}
+	}
+}
+
+
+PUT twitter 
+{
+	"settings" : {
+		"index.number_of_shards" : 3,
+		"index.number_of_replicas" : 1
+	}
+
+}
+
+
+#### Index Read only - 삭제는 막을 수 없지만 read only 형태로 만드는 것은 가능
+# "index.blocks.read_only_allow_delete": true 로 설정하고
+# PUT twitter/_doc/1 ...로 문서를 색인하면 색인되지 않음
+PUT twitter/_settings
+{
+    "index.blocks.read_only_allow_delete": true
+}
+
+# False로 설정하는 기능
+PUT twitter/_settings
+{
+    "index.blocks.read_only_allow_delete": false
+}
+
+
+## null
+PUT twitter/_settings
+{
+    "index.blocks.read_only_allow_delete": null
+}
+
+DELETE twitter
+
+HEAD twitter
+
+GET twitter/_settings
+
+## 7.X 버전
+GET twitter/_mappings
+GET twitter/_mapping
+
+## 6번전에서는 아래와 같이 사용
+GET twitter/_mapping
+GET twitter/_mappings
+GET twitter/_mapping/_doc
+GET twitter/_mappings/_doc
+
+## Index 통계 데이터 정보 확인
+GET twitter/_stats
+
+## 트위터 세그먼트 정보 확인
+GET twitter/_segments
+
+## 클러스터 내 Index 상태 정보 확인
+GET _cat/indices?v
+
+## 특정 인덱스의 상태 정보 확인
+GET _cat/indices/twitter?v
+
+## 7.x 버전부터는 _doc 이외의 타입 이름은 권고되지 않음
+PUT twitter/_doc/1
+{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+
+## GET _mappings로 확인
+GET twitter/_mappings
+
+
+## 7.x 버전에서 type 을 _doc 으로 주지 않은 채 PUT Method 로 문서를 색인한다면?
+PUT specifictype/mytype/1
+{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+
+## mytype 이 아닌 _doc 타입 이름으로도 문서 색인 가능 
+PUT specifictype/_doc/2
+{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+## 문서 ID가 없을 때만 색인 : Index Create Operator, 문서 아이디가 존재하면 문서 색인이 불가능함
+PUT twitter/_doc/1?op_type=create
+{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+## _create API
+# PUT twitter/_doc/1?op_type=create 과 동일한 동작
+PUT twitter/_doc/1/_create
+{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+PUT twitter/_doc/1
+{
+    "user" : "salad",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+## 사용자 정의된 문서를 ID지정 없이 색인 : POST Method를 이용하면 문서 ID가 랜덤하게 생성
+POST twitter/_doc
+{
+    "user" : "kimchy",
+    "post_date" : "2009-11-15T14:12:12",
+    "message" : "trying out Elasticsearch"
+}
+
+## 문서 아이디를 통해 문서 가져오기
+GET twitter/_doc/1
+
+## 문서의 _source field만 가져오기
+GET twitter/_source/1
+
+DELETE twitter/_doc/1
+
+
+## 클러스터 Health 정보 확인하기
+GET _cluster/health
+
+## cluster settings 정보 확인
+GET _cluster/settings
