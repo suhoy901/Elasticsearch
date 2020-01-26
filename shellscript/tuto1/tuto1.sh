@@ -17,6 +17,9 @@ KB_RPM="kibana-${ES_VER}-x86_64.rpm"
 KB_ETC="/etc/kibana"
 KB_MYML="kibana.yml"
 
+SEQ="1st"
+ORG_SEQ="org_1st"
+
 #git pull
 
 # ES Package Install
@@ -57,9 +60,8 @@ function configure_es_yaml
     sudo echo "cluster.initial_master_nodes: [ \"$ES_NODEIP:9300\",  ]" | sudo tee -a ${ES_ETC}/${ES_MYML} > /dev/null
 
     # jvm options Configure for Heap Memory
-    sudo cp -f ${ES_ETC}/${ES_JVM} ${ES_ETC}/${ES_JVM}.${ORG_SEQ}
+    sudo cp -f ${ES_ETC}/${ES_JVM} ./${ES_JVM}.${ORG_SEQ}
     sudo cp -f ${ES_JVM}.${SEQ} ${ES_ETC}/${ES_JVM}
-
 }
 
 # Start Elasticsearch
