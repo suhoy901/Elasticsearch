@@ -1,0 +1,9 @@
+
+### ES Port Settings
+http.port: 9200
+transport.tcp.port: 9300
+
+### ES Node Role Settings
+node.master: true
+node.data: true
+
