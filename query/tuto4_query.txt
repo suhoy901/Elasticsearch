@@ -1,3 +1,5 @@
+GET _cluster/health
+
 PUT _all/_settings
 {
   "settings": {
@@ -26,8 +28,12 @@ PUT _cluster/settings
 
 GET _cluster/settings?flat_settings
 
+POST _flush/synced
+
 # [ec2-user@ip-xxx-xxx-xxx-xxx ~]$ sudo systemctl stop elasticsearch
 # [ec2-user@ip-xxx-xxx-xxx-xxx ~]$ sudo systemctl start elasticsearch
+
+GET _cat/nodes
 
 # Routing On
 PUT _cluster/settings
@@ -37,7 +43,15 @@ PUT _cluster/settings
   }
 }
 
+GET _cat/health?v
+
+
 GET _cluster/settings?flat_settings
+
+GET _cat/recovery
+
+GET _cat/health?v
+
 
 ## Shard Reroute 
 POST _cluster/reroute 
@@ -47,8 +61,8 @@ POST _cluster/reroute
       "move" : {
         "index" : "twitter",
         "shard" : 0,
-        "from_node" : "data-ip-172-31-11-201",
-        "to_node" : "data-ip-172-31-3-240"
+        "from_node" : "data-ES-Data-vm6",
+        "to_node" : "data-ES-Data-vm5"
      }
     } 
   ]
@@ -97,14 +111,16 @@ PUT twitter/_settings
   "index.routing.allocation.enable" : null
 }
 
-GET twitter/_settings?flat_settings
-
+GET _cluster/settings?flat_settings
 
 # Routing Rebalance
 PUT twitter/_settings
 {
   "index.routing.rebalance.enable" : null
 }
+
+GET _cluster/settings?flat_settings
+
 
 # Index Dynamic Mapping 
 PUT data/_doc/1 
@@ -186,7 +202,7 @@ PUT _template/mytemplate
 
 GET _template/mytemplate?flat_settings
 
-PUT test/_settings
+PUT data/_settings
 {
   "index.routing.allocation.require.box_type" : "warmdata"
 }
@@ -206,6 +222,18 @@ PUT /_cluster/settings?flat_settings
   }
 }
 
+PUT /_cluster/settings?flat_settings
+{
+  "persistent" : {
+    "discovery.zen.minimum_master_nodes" : null
+  },
+  "transient" : {
+    "cluster.routing.allocation.enable" : null,
+    "cluster.routing.allocation.exclude._ip" : null
+  }
+}
+
+
 GET _cluster/settings?flat_settings
 
 # _cluster API 로 클러스터 라우팅 할당 모드를 변경 
@@ -224,9 +252,17 @@ GET _cluster/settings?flat_settings
 PUT _cluster/settings?flat_settings
 {
   "transient" : {
-    "cluster.routing.allocation.exclude._ip" : "1.1.1.1, 2.2.2.2, 3.3.3.*"
+    "cluster.routing.allocation.exclude._ip" : "1.1.1.1, 2.2.2.2, 3.3.3.3"
   }
 }
+
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.exclude._ip" : null
+  }
+}
+
 
 GET _cluster/settings?flat_settings
 
@@ -239,7 +275,7 @@ POST _cluster/reroute
       "allocate_replica" : {
         "index" : "twitter",
         "shard" : 0,
-        "node" : "data-ip-172-31-0-80"
+        "node" : "data-ES-Data-vm5"
       }
     } 
   ]
@@ -320,6 +356,8 @@ GET test/_search
 # test index 생성
 POST test1/_doc 
 { "name": "test1" }
+
+DELETE test1
 
 POST test2/_doc 
 { "name": "test1" }
