@@ -1,0 +1,1170 @@
+####################################################################
+####################################################################
+########################################################################################################################################################
+####################################################################
+####################################################################################
+### 실습 1
+
+PUT _all/_settings
+{
+  "settings": {
+    "index.unassigned.node_left.delayed_timeout": "5s" 
+  }
+}
+
+DELETE twitter
+
+PUT twitter
+{
+  "settings": {
+    "index.number_of_shards": 6,
+    "index.number_of_replicas": 1
+  }
+}
+
+## Rolling Restart 
+# Routing Off
+PUT _cluster/settings
+{
+  "transient" : {
+    "cluster.routing.allocation.enable" : "new_primaries"
+  }
+}
+
+GET _cluster/settings?flat_settings
+
+## 데이터 노드 1
+# [ec2-user@ip-xxx-xxx-xxx-xxx ~]$ sudo systemctl stop elasticsearch
+# [ec2-user@ip-xxx-xxx-xxx-xxx ~]$ sudo systemctl start elasticsearch
+
+# Routing On
+PUT _cluster/settings
+{
+  "transient" : {
+    "cluster.routing.allocation.enable" : null
+  }
+}
+
+GET _cluster/settings?flat_settings
+
+## Shard Reroute 
+# data-ip-172-31-1-103 -> data-ip-172-31-6-56
+POST _cluster/reroute 
+{
+  "commands" : [ 
+    {
+      "move" : {
+        "index" : "twitter",
+        "shard" : 0,
+        "from_node" : "data-ip-172-31-1-103",
+        "to_node" : "data-ip-172-31-6-56"
+     }
+    } 
+  ]
+}
+
+## Shard Allocation by Watermark 
+# Disk Threshold Enable & Watermark Setting
+PUT _cluster/settings?flat_settings
+{
+  "transient": {
+    "cluster.routing.allocation.disk.threshold_enabled": "true",
+    "cluster.routing.allocation.disk.watermark.low": "85%",
+    "cluster.routing.allocation.disk.watermark.high": "90%",
+    "cluster.routing.allocation.disk.watermark.flood_stage": "95%"
+  }
+}
+
+GET _cluster/settings?flat_settings
+
+# Read only off
+PUT twitter/_settings
+{
+  "index.blocks.read_only_allow_delete": null
+}
+
+
+
+
+## Dynamic Index Setting 
+# Number Of Replicas
+PUT twitter/_settings
+{
+  "index.number_of_replicas" : 2
+}
+
+GET twitter/_settings?flat_settings
+
+# Refresh Interval
+PUT twitter/_settings
+{
+  "index.refresh_interval" : "2s"
+}
+
+GET twitter/_settings?flat_settings
+
+PUT twitter/_settings
+{
+  "index.refresh_interval" : null
+}
+
+GET twitter/_settings?flat_settings
+
+
+
+# Routing Allocation
+PUT twitter/_settings
+{
+  "index.routing.allocation.enable" : null
+}
+
+GET twitter/_settings?flat_settings
+
+
+# Routing Rebalance
+PUT twitter/_settings
+{
+  "index.routing.rebalance.enable" : null
+}
+
+# Index Dynamic Mapping 
+PUT data/_doc/1 
+{ "count": 5 }
+
+GET data/_mapping
+
+
+## 타입을 정확히 잘 구분해야함
+## strdata : type을 text와 keyword의 데이터타입으로 2가지를 만들어서 매핑함 꼭 기억
+PUT strdata/_doc/1
+{ "stringdata": "strdata" }
+
+GET strdata/_mapping
+
+# Index Template 
+PUT _template/mytemplate
+{
+  "index_patterns": ["te*", "bar*"],
+  "order" : 0,
+  "settings": {
+    "number_of_shards": 2
+  }
+}
+
+## cat api로 클러스터에 설정된 템플릿들을 확인할 수 있음
+GET _cat/templates?v
+
+GET _template/mytemplate?flat_settings
+
+
+## test 템플릿 만들어 보기
+## primary 샤드가 2개인 것을 확인할 수 있음(head)
+POST test_template/_doc
+{
+  "test": "template"
+}
+
+PUT _template/mytemplate_order1
+{
+  "index_patterns": ["test*"],
+  "order" : 1,
+  "settings": {
+    "number_of_shards": 3,
+    "number_of_replicas": 2
+  }
+}
+
+GET _template/mytemplate_order1?flat_settings
+
+POST test_template_order1/_doc
+{
+  "test": "template"
+}
+
+PUT _template/mytemplate_order2
+{
+  "index_patterns": ["test_template*"],
+  "order" : 2,
+  "settings": {
+    "number_of_shards": 4
+  }
+}
+
+GET _template/mytemplate_order2?flat_settings
+
+## 모든 템플릿에 걸리게 설정
+# order 1번의 프라이머리 샤드설정이 무시(order number가 높은 2번에 의해서 무시)
+# 그렇지만 replica는 1번 설정이 적용된 것을 알 수 있음 
+POST test_template_order2_index/_doc
+{
+  "test": "template"
+}
+
+
+## 실습을 위해서 템플릿을 제거
+GET _cat/templates?v&s=name
+DELETE _template/mytemplate
+DELETE _template/mytemplate_order1
+DELETE _template/mytemplate_order2
+GET _cat/templates?v&s=name
+
+# Hot / Warm Data 
+PUT _template/mytemplate
+{
+  "index_patterns": ["*"],
+  "order" : 0,
+  "settings": {
+    "number_of_shards": 3,
+    "index.routing.allocation.require.box_type" : "hotdata"
+  }
+}
+
+GET _template/mytemplate?flat_settings
+
+PUT test/_settings
+{
+  "index.routing.allocation.require.box_type" : "warmdata"
+}
+
+
+
+
+
+## 실습3: Cluster API
+# transient, persistent 설정해보기 
+
+GET _cluster/settings?flat_settings
+
+PUT /_cluster/settings?flat_settings
+{
+  "persistent" : {
+    "discovery.zen.minimum_master_nodes" : 1
+  },
+  "transient" : {
+    "cluster.routing.allocation.enable" : "none"
+  }
+}
+
+GET _cluster/settings?flat_settings
+
+
+## new_primaries 설정
+## 아래 작업 이후 데이터 노드를 systemctl stop elasticsearch로 내려봐라
+## explain보고 다시 systemctl start elasticsearch
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.enable" : "new_primaries"
+  }
+}
+
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.enable" : null
+  }
+}
+
+
+
+POST _cluster/allocation/explain
+
+
+# _cluster API 로 클러스터 라우팅 할당 모드를 변경 
+
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.enable" : "none"
+  }
+}
+
+
+GET _cluster/settings?flat_settings
+
+# _cluster API 로 운영중인 특정 노드의 샤드 제외 
+
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.exclude._ip" : "1.1.1.1, 2.2.2.2, 3.3.3.*"
+  }
+}
+
+
+## 똑같이 공유하고 있는 인덱스의 샤드가 아닌 나머지는 제외
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.exclude._name" : "data-ip-172-31-15-31"
+  }
+}
+
+PUT _cluster/settings?flat_settings
+{
+  "transient" : {
+    "cluster.routing.allocation.exclude._name" : null
+  }
+}
+
+
+GET _cluster/settings?flat_settings
+
+# POST _cluster/reroute 를 이용한 unassigned 샤드 강제 분배 
+
+POST _cluster/reroute
+{
+  "commands" : [ 
+    {
+      "allocate_replica" : {
+        "index" : "twitter",
+        "shard" : 0,
+        "node" : "data-ip-172-31-0-80"
+      }
+    } 
+  ]
+}
+
+# POST _cluster/reroute 를 이용한 샤드 할당에 실패한 샤드 강제 분배 
+
+POST _cluster/reroute?retry_failed
+
+# POST _cluster/allocation/explain 을 통해 샤드가 왜 할당되지 못했는지를 확인 
+
+POST _cluster/allocation/explain
+
+# _all 이나 wildcard 를 대상으로 삭제작업 방지 
+
+PUT _cluster/settings?flat_settings
+{
+  "transient": {
+    "action.destructive_requires_name": true
+  } 
+}
+
+GET _cluster/settings?flat_settings
+
+# POST _reindex 를 이용한 재색인 
+
+POST _reindex
+{
+  "source": {
+    "index": "twitter"
+  },
+  "dest": {
+    "index": "new_twitter"
+  }
+}
+
+# 외부 클러스터에서 reindex 가능 
+
+# sudo vi /etc/elasticsearch/elasticsearch.yml
+# 아래 내용 추가하려 해당 whitelist 로 부터 인덱스를 재색인 할 수 있도록 설정
+# reindex.remote.whitelist: "{SRC_Cluster_URL}:9200"
+
+# curl -XPOST -H 'Content-Type: application/json' http://{my_cluster_url}/_reindex
+#{
+#    "source": {
+#        "remote": {
+#            "host": "http://{SRC_Cluster_URL}:9200",
+#        },
+#        "index": "twitter"
+#    },
+#    "dest": {
+#        "index": "re_twitter"
+#    }
+#}
+
+# bulk API 
+
+DELETE test
+POST _bulk
+{ "index" : { "_index" : "test", "_type" : "_doc", "_id" : "1" } }
+{ "field1" : "value1" }
+{ "delete" : { "_index" : "test", "_type" : "_doc", "_id" : "2" } }
+{ "create" : { "_index" : "test", "_type" : "_doc", "_id" : "3" } }
+{ "field1" : "value3" }
+{ "update" : {"_id" : "1", "_type" : "_doc", "_index" : "test"} }
+{ "doc" : {"field2" : "value2"} }
+
+GET test/_search
+
+# json 문서로 bulking 하기 
+
+# curl -s -H "Content-Type: application/x-ndjson" -XPOST localhost:9200/_bulk --data-binary “@accounts.json"
+
+# curl -s -H "Content-Type: application/x-ndjson" -XPOST localhost:9200/_bulk --data-binary "@shakespeare_6.0.json"
+
+# aliases API 
+
+# test index 생성
+POST test1/_doc 
+{ "name": "test1" }
+
+POST test2/_doc 
+{ "name": "test1" }
+
+POST test3/_doc 
+{ "name": "test1" }
+
+POST /_aliases
+{
+  "actions": [
+    { "add": { "index": "test1", "alias": "alias1" } }
+  ]
+}
+
+POST test1/_aliases/alias_direct
+
+# 삭제
+POST /_aliases
+{
+  "actions": [
+    { "remove": { "index": "test1", "alias": "alias1" } }
+  ]
+}
+
+DELETE test1/_aliases/alias_direct
+
+
+## aliase는 중복이 가능하다
+# 여러 인덱스에 앨리어싱 
+
+POST /_aliases
+{
+  "actions": [
+    { "add": { "indices": ["test1", "test2"], "alias": "alias2" } }
+  ]
+}
+
+# 와일드카드 이용
+
+POST /_aliases
+{
+  "actions": [
+    { "add": { "index": "test*", "alias": "alias3" } }
+  ]
+}
+
+# 세그먼트 병합하기 
+# 세그머느의 개수설정
+POST /_forcemerge?max_num_segments=1
+
+
+# index open/close 
+
+POST twitter/_close
+POST twitter/_open
+
+
+
+####################################################################
+####################################################################
+########################################################################################################################################
+
+####################################################################
+####################################################################
+####################################################################
+## Analysis
+# 애널라이저 확인
+
+
+##### 실습 3
+# standard
+POST _analyze
+{
+  "text": "Winter is Coming!!!"
+}
+
+POST _analyze
+{
+  "tokenizer": "standard",
+  "filter": [
+    "lowercase",
+    "asciifolding"
+  ],
+  "text": "Is this déja vu?"
+}
+
+# whitespace
+POST _analyze
+{
+  "analyzer": "whitespace",
+  "text": "Winter is coming!!!"
+}
+
+POST _analyze
+{
+  "char_filter": [
+    "html_strip"
+  ],
+  "tokenizer": "whitespace",
+  "filter": [
+    "uppercase"
+  ],
+  "text": "<B>This is mixed analyzer</B>"
+}
+
+# english
+POST _analyze
+{
+  "analyzer": "english",
+  "text": "Winter is coming!!!"
+}
+
+# 이미 정의되어 있는 analyzer 를 그대로 가져다가 사용하는 방식
+PUT index_analyzer_settings1
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "my_analyzer": {
+          "type": "standard",
+          "max_token_length": 5,
+          "stopwords": "_english_"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "comment": {
+        "type": "text",
+        "analyzer": "my_analyzer"
+      }
+    }
+  }
+}
+
+POST index_analyzer_settings1/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "<B>This is Standard Analyzer</B>"
+}
+
+POST index_analyzer_settings1/_doc
+{
+  "comment": "<B>This is Standard Analyzer</B>"
+}
+
+GET index_analyzer_settings1/_search
+{
+  "query": {
+    "match": {
+      "comment": "standard"
+    }
+  }
+}
+
+# 이미 정의되어 있는 tokenizer 에 character filter, token filter 를 조합하여 사용하는 방식
+PUT index_analyzer_settings2
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "char_filter": [
+            "html_strip"
+          ],
+          "tokenizer": "standard",
+          "filter": [
+            "uppercase"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "comment": {
+        "type": "text",
+        "analyzer": "my_analyzer"
+      }
+    }
+  }
+}
+
+POST index_analyzer_settings2/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "<B>This is Standard Analyzer</B>"
+}
+
+POST index_analyzer_settings2/_doc
+{
+  "comment": "<B>This is Standard Analyzer</B>"
+}
+
+
+## 특정 필드를 매핑하는 것
+GET index_analyzer_settings2/_search
+{
+  "query": {
+    "match": {
+      "comment": "standard"
+    }
+  }
+}
+
+# mixed
+PUT mixed_analyzer
+{
+  "settings": {
+    "analysis": {
+      "char_filter": {
+        "my_char_filter": {
+          "type": "mapping",
+          "mappings": [
+            ":) => _happy_",
+            ":( => _sad_"
+          ]
+        }
+      },
+      "tokenizer": {
+        "my_tokenizer": {
+          "type": "standard",
+          "max_token_length": 20
+        }
+      },
+      "filter": {
+        "my_stop": {
+          "type": "stop",
+          "stopwords": [
+            "and",
+            "is",
+            "the",
+            "this"
+          ]
+        }
+      },
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "char_filter": [
+            "html_strip",
+            "my_char_filter"
+          ],
+          "tokenizer": "my_tokenizer",
+          "filter": [
+            "lowercase",
+            "my_stop"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "comment": {
+        "type": "text",
+        "analyzer": "my_analyzer"
+      }
+    }
+  }
+}
+
+POST mixed_analyzer/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "<B>This is My Analyzer :)</B>"
+}
+
+POST mixed_analyzer/_doc
+{
+  "comment": "<B>This is My Analyzer :)</B>"
+}
+
+GET mixed_analyzer/_search
+{
+  "query": {
+    "match": {
+      "comment": "my analyzer"
+    }
+  }
+}
+
+PUT nori_sample
+{
+  "settings": {
+    "analysis": {
+      "tokenizer": {
+        "nori_user_dict": {
+          "type": "nori_tokenizer",
+          "decompound_mode": "mixed",
+          "user_dictionary": "userdict_ko.txt"
+        }
+      },
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "tokenizer": "nori_user_dict"
+        }
+      }
+    }
+  }
+}
+
+GET shakespeare/_search
+# Term Vector
+POST /shakespeare/_doc/gPezC3ABFjKEo3V5Mu-2/_termvectors
+{
+  "fields": [
+    "text_entry"
+  ],
+  "offsets": true,
+  "payloads": true,
+  "positions": true,
+  "term_statistics": true,
+  "field_statistics": true
+}
+
+# URI Search
+GET shakespeare/_search?from=0&size=100&q=text_entry:mother&sort=line_id:asc
+
+# Request Body Search
+POST shakespeare/_search
+{
+  "query": {
+    "term": {
+      "play_name.keyword": "Henry IV"
+    }
+  }
+}
+
+# Pagination
+POST shakespeare/_search
+{
+  "from": 0,
+  "size": 2,
+  "query": {
+    "match": {
+      "text_entry": "my mother"
+    }
+  }
+}
+
+# max pagination size 변경 : 10001개
+PUT shakespeare/_settings
+{
+  "index.max_result_window": 10001
+}
+
+# sort
+POST shakespeare/_search
+{
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+
+################### Leaf Query clause ################
+
+# 스코어 계산방식
+POST shakespeare/_search
+{
+  "explain": true,
+  "from": 0,
+  "size": 2,
+  "query": {
+    "match": {
+      "text_entry": "my mother"
+    }
+  }
+}
+
+# _source filtering
+## 소트된 결과 혹은 하일라이트된 결과
+POST shakespeare/_search
+{
+  "_source": false,
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+POST shakespeare/_search
+{
+  "_source": [
+    "speaker",
+    "text_entry"
+  ],
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+POST shakespeare/_search
+{
+  "_source": [
+    "*num*"
+  ],
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+# highlight
+## 데이터를 찾고싶은 경우 많이 사용
+POST shakespeare/_search
+{
+  "_source": [
+    "play_name",
+    "speaker",
+    "text_entry"
+  ],
+  "query": {
+    "query_string": {
+      "query": "henry"
+    }
+  },
+  "highlight": {
+    "fields": {
+      "speaker": {}
+    }
+  }
+}
+
+# match query
+POST shakespeare/_search
+{
+  "query": {
+    "match": {
+      "text_entry": "my mother"
+    }
+  }
+}
+
+# boost 스코어가 2배가 됨
+POST shakespeare/_search
+{
+  "query": {
+    "match": {
+      "text_entry": {
+        "query": "my mother",
+        "boost": 2 
+      }
+    }
+  }
+}
+
+# match_phrase : 순서대로만 검색함
+POST shakespeare/_search
+{
+  "query": {
+    "match_phrase": {
+      "text_entry": "my mother a"
+    }
+  }
+}
+
+# match_phrase_prefix : 뒤에 있는 단어를 마치 와일드카드처럼 사용
+POST shakespeare/_search
+{
+  "query": {
+    "match_phrase_prefix": {
+      "text_entry": "my mother d"
+    }
+  }
+}
+
+# multi match
+POST multi_match_index/_doc
+{
+  "name": "ElasticSearch Engine",
+  "comment": "It's Best Solution"
+}
+
+POST multi_match_index/_doc
+{
+  "name": "Mongo DB",
+  "comment": "What is difference ElasticSearch Engine"
+}
+
+## 검색은 Engine, 필드는 name과 comment
+POST multi_match_index/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "Engine",
+      "fields": [
+        "name",
+        "comment"
+      ]
+    }
+  }
+}
+
+# query_string
+POST shakespeare/_search
+{
+  "query": {
+    "query_string": {
+      "query": "henry VI*",
+      "fields": [
+        "text_entry",
+        "play_name"
+      ]
+    }
+  }
+}
+
+
+### Term레벨 쿼리
+# term
+## keyword 필드로 검색 : term은 정확히 일치해야 함
+## 스코어가 전부 같음
+POST shakespeare/_search
+{
+  "query": {
+    "term": {
+      "play_name.keyword": "Henry IV"
+    }
+  }
+}
+
+## 마찬가지로 스코어가 같음을 알 수 있음
+POST shakespeare/_search
+{
+  "query": {
+    "term": {
+      "play_name.keyword": {
+        "value": "Henry IV",
+        "boost": 2.0
+      }
+    }
+  }
+}
+
+# terms 1938 YORK
+## 정말로 만개의 문서를 검색
+## YORK이라는 단어와 KING HENRY IV
+## 하나의 필드를 대상으로 2개의 검색어를 사용
+POST shakespeare/_search
+{
+  "from":0, "size": 10000,
+  "query": {
+    "terms": {
+      "speaker.keyword": [
+        "YORK",
+        "KING HENRY IV"
+      ]
+    }
+  }
+}
+
+# range
+## line_id 250 ~ 259
+POST shakespeare/_search
+{
+  "query": {
+    "range": {
+      "line_id": {
+        "gte": 250,
+        "lte": 259
+      }
+    }
+  }
+}
+
+# wildcard
+POST shakespeare/_search
+{
+  "query": {
+    "wildcard": {
+      "speaker.keyword": "KING HENR*"
+    }
+  }
+}
+
+################### Compound Query ################
+
+
+# bool
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my heart"
+            }
+          }
+        }
+      ],
+      "filter": [
+        {
+          "term": {
+            "speaker.keyword": "KING HENRY IV"
+          }
+        },
+        {
+          "range": {
+            "line_id": {
+              "gte": "30"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# must
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my mother"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# filter
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "speaker.keyword": "KING HENRY IV"
+          }
+        }
+      ]
+    }
+  }
+}
+
+# should 22633 All of one nature, of one substance bred, line_id 14
+# should에서 must나 filter절이 없으면 match 혹은 term 중에 하나만 일치하는 녀석을 검색
+POST shakespeare/_search
+{
+  "from": 0, "size": 10000,
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my mother",
+              "boost": 2
+            }
+          }
+        },
+        {
+          "term": {
+            "speaker.keyword": {
+              "value": "KING HENRY IV"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+
+## Match쿼리가 수행할 결과가 무조거 검색됨
+POST shakespeare/_search
+{
+  "from": 0, "size": 1000,
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "speaker.keyword": {
+              "value": "KING HENRY IV"
+            }
+          }
+        }
+      ],
+      "should": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "her mother",
+              "boost": 2
+            }
+          }
+        }
+      ],
+      "minimum_should_match": 1
+    }
+  }
+}
+
+# must_not
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must_not": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my mother"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# bool all
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "text_entry": "my mother"
+          }
+        }
+      ],
+      "filter": [
+        {
+          "range": {
+            "line_id": {
+              "gte": "30"
+            }
+          }
+        }
+      ],
+      "should": [
+        {
+          "term": {
+            "speaker.keyword": "KING HENRY IV"
+          }
+        },
+        {
+          "term": {
+            "speaker.keyword": "YORK"
+          }
+        }
+      ],
+      "minimum_should_match": 1,
+      "must_not": [
+        {
+          "match": {
+            "play_name": "Part"
+          }
+        }
+      ]
+    }
+  }
+}
