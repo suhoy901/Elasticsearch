@@ -1,0 +1,703 @@
+## Analysis
+# 애널라이저 확인
+
+
+##### tu 3
+# standard
+POST _analyze
+{
+  "text": "Winter is Coming!!!"
+}
+
+POST _analyze
+{
+  "tokenizer": "standard",
+  "filter": [
+    "lowercase",
+    "asciifolding"
+  ],
+  "text": "Is this déja vu?"
+}
+
+# whitespace
+POST _analyze
+{
+  "analyzer": "whitespace",
+  "text": "Winter is coming!!!"
+}
+
+POST _analyze
+{
+  "char_filter": [
+    "html_strip"
+  ],
+  "tokenizer": "whitespace",
+  "filter": [
+    "uppercase"
+  ],
+  "text": "<B>This is mixed analyzer</B>"
+}
+
+# english
+POST _analyze
+{
+  "analyzer": "english",
+  "text": "Winter is coming!!!"
+}
+
+# 이미 정의되어 있는 analyzer 를 그대로 가져다가 사용하는 방식
+PUT index_analyzer_settings1
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "my_analyzer": {
+          "type": "standard",
+          "max_token_length": 5,
+          "stopwords": "_english_"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "comment": {
+        "type": "text",
+        "analyzer": "my_analyzer"
+      }
+    }
+  }
+}
+
+POST index_analyzer_settings1/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "<B>This is Standard Analyzer</B>"
+}
+
+POST index_analyzer_settings1/_doc
+{
+  "comment": "<B>This is Standard Analyzer</B>"
+}
+
+GET index_analyzer_settings1/_search
+{
+  "query": {
+    "match": {
+      "comment": "standard"
+    }
+  }
+}
+
+# 이미 정의되어 있는 tokenizer 에 character filter, token filter 를 조합하여 사용하는 방식
+PUT index_analyzer_settings2
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "char_filter": [
+            "html_strip"
+          ],
+          "tokenizer": "standard",
+          "filter": [
+            "uppercase"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "comment": {
+        "type": "text",
+        "analyzer": "my_analyzer"
+      }
+    }
+  }
+}
+
+POST index_analyzer_settings2/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "<B>This is Standard Analyzer</B>"
+}
+
+POST index_analyzer_settings2/_doc
+{
+  "comment": "<B>This is Standard Analyzer</B>"
+}
+
+
+## 특정 필드를 매핑하는 것
+GET index_analyzer_settings2/_search
+{
+  "query": {
+    "match": {
+      "comment": "standard"
+    }
+  }
+}
+
+# mixed
+PUT mixed_analyzer
+{
+  "settings": {
+    "analysis": {
+      "char_filter": {
+        "my_char_filter": {
+          "type": "mapping",
+          "mappings": [
+            ":) => _happy_",
+            ":( => _sad_"
+          ]
+        }
+      },
+      "tokenizer": {
+        "my_tokenizer": {
+          "type": "standard",
+          "max_token_length": 20
+        }
+      },
+      "filter": {
+        "my_stop": {
+          "type": "stop",
+          "stopwords": [
+            "and",
+            "is",
+            "the",
+            "this"
+          ]
+        }
+      },
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "char_filter": [
+            "html_strip",
+            "my_char_filter"
+          ],
+          "tokenizer": "my_tokenizer",
+          "filter": [
+            "lowercase",
+            "my_stop"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "comment": {
+        "type": "text",
+        "analyzer": "my_analyzer"
+      }
+    }
+  }
+}
+
+POST mixed_analyzer/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "<B>This is My Analyzer :)</B>"
+}
+
+POST mixed_analyzer/_doc
+{
+  "comment": "<B>This is My Analyzer :)</B>"
+}
+
+GET mixed_analyzer/_search
+{
+  "query": {
+    "match": {
+      "comment": "my analyzer"
+    }
+  }
+}
+
+PUT nori_sample
+{
+  "settings": {
+    "analysis": {
+      "tokenizer": {
+        "nori_user_dict": {
+          "type": "nori_tokenizer",
+          "decompound_mode": "mixed",
+          "user_dictionary": "userdict_ko.txt"
+        }
+      },
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "tokenizer": "nori_user_dict"
+        }
+      }
+    }
+  }
+}
+
+GET shakespeare/_search
+# Term Vector
+POST /shakespeare/_doc/gPezC3ABFjKEo3V5Mu-2/_termvectors
+{
+  "fields": [
+    "text_entry"
+  ],
+  "offsets": true,
+  "payloads": true,
+  "positions": true,
+  "term_statistics": true,
+  "field_statistics": true
+}
+
+# URI Search
+GET shakespeare/_search?from=0&size=100&q=text_entry:mother&sort=line_id:asc
+
+# Request Body Search
+POST shakespeare/_search
+{
+  "query": {
+    "term": {
+      "play_name.keyword": "Henry IV"
+    }
+  }
+}
+
+# Pagination
+POST shakespeare/_search
+{
+  "from": 0,
+  "size": 2,
+  "query": {
+    "match": {
+      "text_entry": "my mother"
+    }
+  }
+}
+
+# max pagination size 변경 : 10001개
+PUT shakespeare/_settings
+{
+  "index.max_result_window": 10001
+}
+
+# sort
+POST shakespeare/_search
+{
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+
+################### Leaf Query clause ################
+
+# 스코어 계산방식
+POST shakespeare/_search
+{
+  "explain": true,
+  "from": 0,
+  "size": 2,
+  "query": {
+    "match": {
+      "text_entry": "my mother"
+    }
+  }
+}
+
+# _source filtering
+## 소트된 결과 혹은 하일라이트된 결과
+POST shakespeare/_search
+{
+  "_source": false,
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+POST shakespeare/_search
+{
+  "_source": [
+    "speaker",
+    "text_entry"
+  ],
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+POST shakespeare/_search
+{
+  "_source": [
+    "*num*"
+  ],
+  "sort": {
+    "line_id": "desc"
+  }
+}
+
+# highlight
+## 데이터를 찾고싶은 경우 많이 사용
+POST shakespeare/_search
+{
+  "_source": [
+    "play_name",
+    "speaker",
+    "text_entry"
+  ],
+  "query": {
+    "query_string": {
+      "query": "henry"
+    }
+  },
+  "highlight": {
+    "fields": {
+      "speaker": {}
+    }
+  }
+}
+
+# match query
+POST shakespeare/_search
+{
+  "query": {
+    "match": {
+      "text_entry": "my mother"
+    }
+  }
+}
+
+# boost 스코어가 2배가 됨
+POST shakespeare/_search
+{
+  "query": {
+    "match": {
+      "text_entry": {
+        "query": "my mother",
+        "boost": 2 
+      }
+    }
+  }
+}
+
+# match_phrase : 순서대로만 검색함
+POST shakespeare/_search
+{
+  "query": {
+    "match_phrase": {
+      "text_entry": "my mother a"
+    }
+  }
+}
+
+# match_phrase_prefix : 뒤에 있는 단어를 마치 와일드카드처럼 사용
+POST shakespeare/_search
+{
+  "query": {
+    "match_phrase_prefix": {
+      "text_entry": "my mother d"
+    }
+  }
+}
+
+# multi match
+POST multi_match_index/_doc
+{
+  "name": "ElasticSearch Engine",
+  "comment": "It's Best Solution"
+}
+
+POST multi_match_index/_doc
+{
+  "name": "Mongo DB",
+  "comment": "What is difference ElasticSearch Engine"
+}
+
+## 검색은 Engine, 필드는 name과 comment
+POST multi_match_index/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "Engine",
+      "fields": [
+        "name",
+        "comment"
+      ]
+    }
+  }
+}
+
+# query_string
+POST shakespeare/_search
+{
+  "query": {
+    "query_string": {
+      "query": "henry VI*",
+      "fields": [
+        "text_entry",
+        "play_name"
+      ]
+    }
+  }
+}
+
+
+### Term Level 쿼리
+# term
+## keyword 필드로 검색 : term은 정확히 일치해야 함
+## 스코어가 전부 같음
+POST shakespeare/_search
+{
+  "query": {
+    "term": {
+      "play_name.keyword": "Henry IV"
+    }
+  }
+}
+
+## 마찬가지로 스코어가 같음을 알 수 있음
+POST shakespeare/_search
+{
+  "query": {
+    "term": {
+      "play_name.keyword": {
+        "value": "Henry IV",
+        "boost": 2.0
+      }
+    }
+  }
+}
+
+# terms 1938 YORK
+## 정말로 만개의 문서를 검색
+## YORK이라는 단어와 KING HENRY IV
+## 하나의 필드를 대상으로 2개의 검색어를 사용
+POST shakespeare/_search
+{
+  "from":0, "size": 10000,
+  "query": {
+    "terms": {
+      "speaker.keyword": [
+        "YORK",
+        "KING HENRY IV"
+      ]
+    }
+  }
+}
+
+# range
+## line_id 250 ~ 259
+POST shakespeare/_search
+{
+  "query": {
+    "range": {
+      "line_id": {
+        "gte": 250,
+        "lte": 259
+      }
+    }
+  }
+}
+
+# wildcard
+POST shakespeare/_search
+{
+  "query": {
+    "wildcard": {
+      "speaker.keyword": "KING HENR*"
+    }
+  }
+}
+
+################### Compound Query ################
+
+
+# bool
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my heart"
+            }
+          }
+        }
+      ],
+      "filter": [
+        {
+          "term": {
+            "speaker.keyword": "KING HENRY IV"
+          }
+        },
+        {
+          "range": {
+            "line_id": {
+              "gte": "30"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# must
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my mother"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# filter
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "speaker.keyword": "KING HENRY IV"
+          }
+        }
+      ]
+    }
+  }
+}
+
+# should 22633 All of one nature, of one substance bred, line_id 14
+# should에서 must나 filter절이 없으면 match 혹은 term 중에 하나만 일치하는 녀석을 검색
+POST shakespeare/_search
+{
+  "from": 0, "size": 10000,
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my mother",
+              "boost": 2
+            }
+          }
+        },
+        {
+          "term": {
+            "speaker.keyword": {
+              "value": "KING HENRY IV"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+
+## Match쿼리가 수행할 결과가 무조 검색됨
+POST shakespeare/_search
+{
+  "from": 0, "size": 1000,
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "speaker.keyword": {
+              "value": "KING HENRY IV"
+            }
+          }
+        }
+      ],
+      "should": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "her mother",
+              "boost": 2
+            }
+          }
+        }
+      ],
+      "minimum_should_match": 1
+    }
+  }
+}
+
+# must_not
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must_not": [
+        {
+          "match": {
+            "text_entry": {
+              "query": "my mother"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# bool all
+POST shakespeare/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "text_entry": "my mother"
+          }
+        }
+      ],
+      "filter": [
+        {
+          "range": {
+            "line_id": {
+              "gte": "30"
+            }
+          }
+        }
+      ],
+      "should": [
+        {
+          "term": {
+            "speaker.keyword": "KING HENRY IV"
+          }
+        },
+        {
+          "term": {
+            "speaker.keyword": "YORK"
+          }
+        }
+      ],
+      "minimum_should_match": 1,
+      "must_not": [
+        {
+          "match": {
+            "play_name": "Part"
+          }
+        }
+      ]
+    }
+  }
+}
