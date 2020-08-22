@@ -94,7 +94,7 @@ $ python generate_dataset.py
 
 ~~~shell
 $ docker build -f Dockerfile -t test-datagen .
-$ docker run --net=docker-elastic-pipeline_elk test-datagen
-$ docker run --net=docker-elastic-pipeline_elk -v="${PWD}/generate_dataset.py:/app/generate_dataset.py" test-datagen
+$ docker run --net=docker-elk-pipeline_elk test-datagen
+$ docker run --net=docker-elk-pipeline_elk -v="${PWD}/generate_dataset.py:/app/generate_dataset.py" test-datagen
 ~~~
 
