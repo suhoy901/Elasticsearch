@@ -1,3 +1,6 @@
+elasticsearch/data
+extensions
+
 dataset/__pycache__
 
-elasticsearch/data
+beats/filebeat-nginx/log/
