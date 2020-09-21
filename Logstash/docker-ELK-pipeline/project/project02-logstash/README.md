@@ -11,7 +11,7 @@
 docker-compose -f docker-compose.logstash02.yml up
 docker-compose -f docker-compose.logstash02.yml up --force-recreate --build 
 docker-compose up
-docker-compose ls
+docker-compose ps
 docker ps
 docker volume ls
 ```
