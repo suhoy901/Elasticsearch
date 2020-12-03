@@ -7,4 +7,4 @@ COPY . /app
 WORKDIR /app
 
 RUN pip install elasticsearch
-CMD ['python', 'app/generate_dataset.py']
+CMD ['python', 'generate_dataset.py']
